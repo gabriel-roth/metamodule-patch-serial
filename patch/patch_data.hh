@@ -24,6 +24,7 @@ struct PatchData {
 	MappedKnobSet midi_maps;
 	std::vector<uint16_t> bypassed_modules;
 	std::vector<ModuleAlias> module_aliases;
+	std::vector<ExpanderConnection> expanders;
 	uint32_t midi_poly_num = 1;
 	PolyMode midi_poly_mode = PolyMode::Rotate;
 	float midi_pitchwheel_range = 1.f;
@@ -504,6 +505,13 @@ struct PatchData {
 			if (a.module_id > module_id)
 				a.module_id--;
 		}
+
+		for (auto &exp : expanders) {
+			if (exp.left_module_id > module_id)
+				exp.left_module_id--;
+			if (exp.right_module_id > module_id)
+				exp.right_module_id--;
+		}
 	}
 
 	// Removes all cables, mappings, etc for a module
@@ -538,6 +546,10 @@ struct PatchData {
 		std::erase(bypassed_modules, static_cast<uint16_t>(module_id));
 
 		std::erase_if(module_aliases, [=](ModuleAlias const &a) { return a.module_id == module_id; });
+
+		std::erase_if(expanders, [=](ExpanderConnection const &exp) {
+			return exp.left_module_id == module_id || exp.right_module_id == module_id;
+		});
 	}
 
 private:

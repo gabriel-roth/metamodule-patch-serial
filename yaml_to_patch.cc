@@ -74,6 +74,9 @@ bool yaml_raw_to_patch(char *yaml, size_t size, PatchData &pd) {
 	if (patchdata.has_child("module_aliases"))
 		patchdata["module_aliases"] >> pd.module_aliases;
 
+	if (patchdata.has_child("expanders"))
+		patchdata["expanders"] >> pd.expanders;
+
 	return true;
 }
 
