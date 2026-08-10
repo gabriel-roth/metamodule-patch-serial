@@ -277,7 +277,7 @@ struct PatchData {
 		return nullptr;
 	}
 
-	const MappedInputJack *find_mapped_injack(uint16_t panel_jack_id) const {
+	const MappedInputJack *find_mapped_injack(uint32_t panel_jack_id) const {
 		for (auto &m : mapped_ins) {
 			if (m.panel_jack_id == panel_jack_id)
 				return &m;
@@ -293,7 +293,7 @@ struct PatchData {
 		return nullptr;
 	}
 
-	const MappedOutputJack *find_mapped_outjack(uint16_t panel_jack_id) const {
+	const MappedOutputJack *find_mapped_outjack(uint32_t panel_jack_id) const {
 		for (auto &m : mapped_outs) {
 			if (m.panel_jack_id == panel_jack_id)
 				return &m;
@@ -301,7 +301,7 @@ struct PatchData {
 		return nullptr;
 	}
 
-	void add_mapped_injack(uint16_t panel_jack_id, Jack jack) {
+	void add_mapped_injack(uint32_t panel_jack_id, Jack jack) {
 		for (auto &m : mapped_ins) {
 			if (m.panel_jack_id == panel_jack_id) {
 				for (auto &j : m.ins) {
@@ -317,11 +317,11 @@ struct PatchData {
 		update_midi_poly_num(panel_jack_id);
 	}
 
-	void add_mapped_outjack(uint16_t panel_jack_id, Jack jack) {
+	void add_mapped_outjack(uint32_t panel_jack_id, Jack jack) {
 		mapped_outs.push_back({panel_jack_id, jack});
 	}
 
-	void set_panel_in_alias(uint16_t panel_jack_id, std::string_view alias) {
+	void set_panel_in_alias(uint32_t panel_jack_id, std::string_view alias) {
 		for (auto &m : mapped_ins) {
 			if (m.panel_jack_id == panel_jack_id) {
 				m.alias_name.copy(alias);
@@ -329,7 +329,7 @@ struct PatchData {
 		}
 	}
 
-	void set_panel_out_alias(uint16_t panel_jack_id, std::string_view alias) {
+	void set_panel_out_alias(uint32_t panel_jack_id, std::string_view alias) {
 		for (auto &m : mapped_outs) {
 			if (m.panel_jack_id == panel_jack_id) {
 				m.alias_name.copy(alias);
@@ -580,7 +580,7 @@ private:
 		return nullptr;
 	}
 
-	void update_midi_poly_num(uint16_t panel_jack_id) {
+	void update_midi_poly_num(uint32_t panel_jack_id) {
 		// User hard-set the count: ignore cables
 		if (midi_poly_num_setting > 0) {
 			midi_poly_num = midi_poly_num_setting;
