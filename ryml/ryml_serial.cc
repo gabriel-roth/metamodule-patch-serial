@@ -24,6 +24,8 @@ void write(ryml::NodeRef *n, MappedKnob const &mapped_knob) {
 		n->append_child() << ryml::key("alias_name") << mapped_knob.alias_name;
 	if (mapped_knob.midi_chan > 0)
 		n->append_child() << ryml::key("midi_chan") << mapped_knob.midi_chan;
+	if (mapped_knob.midi_port_mask > 0)
+		n->append_child() << ryml::key("midi_port_mask") << uint8_t(mapped_knob.midi_port_mask);
 }
 
 void write(ryml::NodeRef *n, MappedKnobSet const &knob_set) {
@@ -221,10 +223,15 @@ bool read(ryml::ConstNodeRef const &n, MappedKnob *k) {
 	n["min"] >> k->min;
 	n["max"] >> k->max;
 
+	uint8_t midi_chan = 0;
 	if (n.has_child("midi_chan"))
-		n["midi_chan"] >> k->midi_chan;
-	else
-		k->midi_chan = 0;
+		n["midi_chan"] >> midi_chan;
+	k->midi_chan = midi_chan;
+
+	uint8_t midi_port_mask = MetaModule::Midi::AllPorts;
+	if (n.has_child("midi_port_mask"))
+		n["midi_port_mask"] >> midi_port_mask;
+	k->midi_port_mask = midi_port_mask;
 
 	if (n.has_child("alias_name")) {
 		if (n["alias_name"].val().size())

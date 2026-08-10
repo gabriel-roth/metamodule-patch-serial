@@ -33,7 +33,8 @@ struct MappedKnob {
 	enum CurveType : uint8_t { Normal, Toggle };
 	uint8_t curve_type;
 
-	uint8_t midi_chan; //0: ignore, 1-16: only MIDI channel 1-16
+	uint8_t midi_chan : 5;		//0: ignore, 1-16: only MIDI channel 1-16
+	uint8_t midi_port_mask : 3; //0: all ports. Bit N set = ignore port N (Midi::port_allows)
 
 	float min;
 	float max;
@@ -143,4 +144,5 @@ static_assert(sizeof(StaticParam) == 8, "StaticParam should be 8B");
 static_assert(sizeof(AliasNameString) == 32, "AliasNameString should be 32B");
 static_assert(sizeof(ModuleAlias) == 34, "ModuleAlias should be 34B");
 static_assert(sizeof(MappedKnob) == 48, "MappedKnob should be 48B");
+static_assert(MetaModule::Midi::NumPorts <= 3, "MappedKnob::midi_port_mask has only 3 bits");
 static_assert(sizeof(MappedOutputJack) == 40, "MappedOutputJack should be 40B");

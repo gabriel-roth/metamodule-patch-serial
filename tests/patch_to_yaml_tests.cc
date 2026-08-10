@@ -315,3 +315,63 @@ TEST_CASE("set_module_alias clear with empty string") {
 	CHECK(pd.get_module_alias(1).empty());
 	CHECK(pd.module_aliases.empty());
 }
+
+TEST_CASE("MIDI map port mask round-trip") {
+	MetaModule::PatchData pd{
+		.module_slugs{"HubMedium", "VCF"},
+	};
+	pd.patch_name = "midi_port_mask";
+
+	// "TRS only" on a CC map, and no filter on a note-gate map
+	pd.add_update_midi_map(MappedKnob{.panel_knob_id = MidiCC0 + 5,
+									  .module_id = 1,
+									  .param_id = 0,
+									  .midi_chan = 3,
+									  .midi_port_mask = MetaModule::Midi::only_port(1),
+									  .min = 0.f,
+									  .max = 1.f});
+	pd.add_update_midi_map(MappedKnob{
+		.panel_knob_id = MidiGateNote0 + 60, .module_id = 1, .param_id = 1, .min = 0.f, .max = 1.f});
+
+	auto yaml = patch_to_yaml_string(pd);
+
+	MetaModule::PatchData pd2;
+	bool ok = yaml_string_to_patch(yaml, pd2);
+	CHECK(ok);
+	REQUIRE(pd2.midi_maps.set.size() == 2);
+	CHECK(unsigned(pd2.midi_maps.set[0].midi_port_mask) == MetaModule::Midi::only_port(1));
+	CHECK(unsigned(pd2.midi_maps.set[0].midi_chan) == 3);
+
+	// An unfiltered map writes no key at all, and reads back as all-ports
+	CHECK(yaml.find("midi_port_mask") != std::string::npos);
+	CHECK(unsigned(pd2.midi_maps.set[1].midi_port_mask) == MetaModule::Midi::AllPorts);
+}
+
+TEST_CASE("MIDI map with no port mask field reads as all ports") {
+	std::string yaml = R"(PatchData:
+  patch_name: old_patch
+  module_slugs:
+    0: HubMedium
+    1: VCF
+  int_cables: []
+  mapped_ins: []
+  mapped_outs: []
+  static_knobs: []
+  mapped_knobs: []
+  midi_maps:
+    name: MIDI
+    set:
+      - panel_knob_id: 517
+        module_id: 1
+        param_id: 0
+        curve_type: 0
+        min: 0.0
+        max: 1.0
+)";
+
+	MetaModule::PatchData pd;
+	bool ok = yaml_string_to_patch(yaml, pd);
+	CHECK(ok);
+	REQUIRE(pd.midi_maps.set.size() == 1);
+	CHECK(unsigned(pd.midi_maps.set[0].midi_port_mask) == MetaModule::Midi::AllPorts);
+}
