@@ -214,6 +214,10 @@ constexpr MidiMappings set_port_mask(uint32_t panel_jack_id, uint8_t mask) {
 	return MidiMappings((panel_jack_id & ~PortMaskBits) | (uint32_t(mask) << PortMaskShift));
 }
 
+constexpr uint32_t strip_port(uint32_t panel_id) {
+	return set_port_mask(panel_id, 0);
+}
+
 // The mask that listens to exactly one port
 constexpr uint8_t only_port(uint8_t port) {
 	return uint8_t(((1u << NumPorts) - 1) & ~(1u << port));
