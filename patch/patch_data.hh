@@ -24,6 +24,10 @@ struct PatchData {
 	MappedKnobSet midi_maps;
 	std::vector<uint16_t> bypassed_modules;
 	std::vector<ModuleAlias> module_aliases;
+
+	std::vector<uint16_t> module_cores;
+	std::vector<uint32_t> module_loads; //units in ppm of one core
+
 	uint32_t midi_poly_num = 1;
 	// User-set max poly channels: 0 = Auto (compute from cables), 1-8 = hard-set midi_poly_num
 	uint16_t midi_poly_num_setting = 0;
@@ -41,6 +45,20 @@ struct PatchData {
 		module_slugs.push_back("HubMedium");
 		knob_sets.push_back({{}, "Knob Set 1"});
 		midi_maps.name = "MIDI";
+	}
+
+	// True if a previously calculated load balance is present and still matches the modules
+	bool has_load_balance(unsigned num_cores) const {
+		if (module_cores.size() != module_slugs.size())
+			return false;
+		if (module_loads.size() != module_slugs.size())
+			return false;
+		return std::ranges::all_of(module_cores, [=](uint16_t core) { return core < num_cores; });
+	}
+
+	void clear_load_balance() {
+		module_cores.clear();
+		module_loads.clear();
 	}
 
 	const MappedKnob *find_mapped_knob(uint32_t set_id, uint32_t module_id, uint32_t param_id) const {
@@ -393,6 +411,8 @@ struct PatchData {
 	size_t add_module(std::string_view slug) {
 		auto module_id = module_slugs.size();
 		module_slugs.push_back({slug});
+		// The new module has no measured load, so the balance must be re-calculated
+		clear_load_balance();
 		return module_id;
 	}
 
@@ -549,6 +569,9 @@ struct PatchData {
 		std::erase(bypassed_modules, static_cast<uint16_t>(module_id));
 
 		std::erase_if(module_aliases, [=](ModuleAlias const &a) { return a.module_id == module_id; });
+
+		// The module's measured load no longer applies
+		clear_load_balance();
 	}
 
 private:

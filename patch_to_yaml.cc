@@ -33,6 +33,11 @@ static ryml::Tree create_tree(PatchData const &pd, ryml::Tree &tree) {
 	data["bypassed_modules"] << pd.bypassed_modules;
 	data["module_aliases"] << pd.module_aliases;
 
+	if (pd.module_cores.size() > 0) {
+		data["module_cores"] << pd.module_cores;
+		data["module_loads"] << pd.module_loads;
+	}
+
 	return tree;
 }
 
