@@ -5,6 +5,7 @@
 #include "util/static_string.hh"
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 constexpr unsigned MaxKnobSets = 8;
@@ -136,10 +137,23 @@ struct MappedLight {
 	uint16_t light_id{};
 };
 
+enum class ExpanderSide : uint8_t { Left = 0, Right = 1 };
+inline std::string_view expander_side_name(ExpanderSide side) {
+	return side == ExpanderSide::Left ? "Left" : "Right";
+}
+
 // right_module_id is attached as the right-side expander of left_module_id
 struct ExpanderConnection {
 	uint16_t left_module_id{};
 	uint16_t right_module_id{};
+
+	// The pair of modules an expander connection would create, given a module, which side
+	// of it, and the module to attach there
+	static ExpanderConnection make(uint16_t module_id, ExpanderSide side, uint16_t other_id) {
+		return side == ExpanderSide::Left ?
+				   ExpanderConnection{.left_module_id = other_id, .right_module_id = module_id} :
+				   ExpanderConnection{.left_module_id = module_id, .right_module_id = other_id};
+	}
 };
 
 enum class PolyMode { Rotate, Reuse, Reset, Mpe };

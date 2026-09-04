@@ -563,6 +563,82 @@ struct PatchData {
 		});
 	}
 
+	//
+	// Expanders
+	//
+
+	bool add_expander(ExpanderConnection conn) {
+		if (can_add_expander(conn)) {
+			expanders.push_back(conn);
+			return true;
+		}
+		return false;
+	}
+
+	// True if the connection is legal
+	bool can_add_expander(ExpanderConnection conn) const {
+		auto num_modules = module_slugs.size();
+		if (conn.left_module_id == conn.right_module_id)
+			return false;
+		if (conn.left_module_id == 0 || conn.right_module_id == 0)
+			return false;
+		if (conn.left_module_id >= num_modules || conn.right_module_id >= num_modules)
+			return false;
+		if (find_expander(conn.left_module_id, ExpanderSide::Right))
+			return false;
+		if (find_expander(conn.right_module_id, ExpanderSide::Left))
+			return false;
+		// Avoid loops
+		if (expander_chain_reaches(conn.right_module_id, ExpanderSide::Right, conn.left_module_id))
+			return false;
+		return true;
+	}
+
+	std::optional<ExpanderConnection> find_expander(uint16_t module_id, ExpanderSide side) const {
+		for (auto const &exp : expanders) {
+			if (side == ExpanderSide::Left && exp.right_module_id == module_id)
+				return exp;
+			if (side == ExpanderSide::Right && exp.left_module_id == module_id)
+				return exp;
+		}
+		return std::nullopt;
+	}
+
+	std::optional<uint16_t> find_expander_module(uint16_t module_id, ExpanderSide side) const {
+		if (auto exp = find_expander(module_id, side))
+			return side == ExpanderSide::Left ? exp->left_module_id : exp->right_module_id;
+		return std::nullopt;
+	}
+
+	// True if target_module_id is reachable from module_id by following expander
+	// connections on the given side
+	bool expander_chain_reaches(uint16_t module_id, ExpanderSide side, uint16_t target_module_id) const {
+		auto max_steps = module_slugs.size();
+		auto cur = module_id;
+		for (size_t i = 0; i < max_steps; i++) {
+			auto next = find_expander_module(cur, side);
+			if (!next)
+				return false;
+			if (*next == target_module_id)
+				return true;
+			cur = *next;
+		}
+		return false;
+	}
+
+	bool has_expander(ExpanderConnection conn) const {
+		return std::ranges::any_of(expanders, [=](ExpanderConnection const &exp) {
+			return exp.left_module_id == conn.left_module_id && exp.right_module_id == conn.right_module_id;
+		});
+	}
+
+	bool remove_expander(ExpanderConnection conn) {
+		auto erased = std::erase_if(expanders, [=](ExpanderConnection const &exp) {
+			return exp.left_module_id == conn.left_module_id && exp.right_module_id == conn.right_module_id;
+		});
+		return erased > 0;
+	}
+
 private:
 	//non-const version for private use only
 	MappedKnob *_get_mapped_knob(uint32_t set_id, uint32_t module_id, uint32_t param_id) {
