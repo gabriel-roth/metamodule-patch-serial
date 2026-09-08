@@ -5,9 +5,12 @@
 #include <cstdint>
 #include <optional>
 
-// Bit layout (16 bits total):
-// 0bCCCC cNNN nnnn nnnn
+// Bit layout (32 bits total):
+// 0b0000 0000 PPPP PPPP CCCC cNNN nnnn nnnn
 //
+// PPPP PPPP: MIDI Port mask (see PortMaskShift below). All bits clear = listen to
+//            every port. This is what patches saved before the MIDI Expander
+//            existed decode to, so they keep working on whichever port is used.
 // CCCC: MIDI Channel (values 0-15 means channel 1-16)
 // c: If 0 then Omni mode (ignore CCCC value). If 1 then use CCCC for MIDI channel
 // NNN: Event type: 1 = Note, 2 = CC, 3 = GateOn, 4 = Clock, 5 = Transport
@@ -44,7 +47,7 @@
 // Note: Channel does not have any meaning for MIDI Clock or Transport events
 //
 
-enum MidiMappings {
+enum MidiMappings : uint32_t {
 	MidiMonoNoteJack = 0x100,
 	MidiNote2Jack,
 	MidiNote3Jack,
@@ -195,13 +198,72 @@ constexpr uint32_t midi_channel(uint32_t panel_jack_id) {
 		return 0;
 }
 
+// Port mask: bit N set means "ignore messages that arrived on port N".
+// A mask of 0 listens to every port. Port numbers match MetaModule::Midi::Event::Port
+// (0=USB, 1=TRS, 2=DIN5)
+static constexpr uint32_t PortMaskShift = 16;
+static constexpr uint32_t PortMaskBits = 0xFFu << PortMaskShift;
+static constexpr uint8_t NumPorts = 3;
+static constexpr uint8_t AllPorts = 0;
+
+constexpr uint8_t port_mask(uint32_t panel_jack_id) {
+	return uint8_t((panel_jack_id & PortMaskBits) >> PortMaskShift);
+}
+
+constexpr MidiMappings set_port_mask(uint32_t panel_jack_id, uint8_t mask) {
+	return MidiMappings((panel_jack_id & ~PortMaskBits) | (uint32_t(mask) << PortMaskShift));
+}
+
+constexpr uint32_t strip_port(uint32_t panel_id) {
+	return set_port_mask(panel_id, 0);
+}
+
+// The mask that listens to exactly one port
+constexpr uint8_t only_port(uint8_t port) {
+	return uint8_t(((1u << NumPorts) - 1) & ~(1u << port));
+}
+
+// Should a mapping with this mask act on a message that arrived on `port`?
+constexpr bool port_allows(uint8_t mask, uint8_t port) {
+	return (mask & (1u << port)) == 0;
+}
+
+// The single port a mask selects, or nullopt for "all ports". Also nullopt for a
+// mask naming more than one port, which the GUI can't produce but a hand-edited
+// patch could.
+constexpr std::optional<uint8_t> selected_port(uint8_t mask) {
+	for (uint8_t port = 0; port < NumPorts; port++) {
+		if (mask == only_port(port))
+			return port;
+	}
+	return std::nullopt;
+}
+
 // midi_chan: 1-16 for a MIDI Channel. 0 for Omni
 constexpr MidiMappings set_midi_channel(uint32_t panel_jack_id, uint32_t midi_chan) {
+	// strip_midi_channel() drops the port bits along with the channel, so carry them over
+	const auto ports = panel_jack_id & PortMaskBits;
+
 	if (midi_chan >= 1 && midi_chan <= 16)
-		return MidiMappings(strip_midi_channel(panel_jack_id) | 0x0800 | ((midi_chan - 1) << 12));
+		return MidiMappings(strip_midi_channel(panel_jack_id) | ports | 0x0800 | ((midi_chan - 1) << 12));
 	else
-		return MidiMappings(strip_midi_channel(panel_jack_id));
+		return MidiMappings(strip_midi_channel(panel_jack_id) | ports);
 }
+
+static_assert(port_mask(MidiCC0) == AllPorts, "Legacy mappings must listen to every port");
+static_assert(port_allows(AllPorts, 0) && port_allows(AllPorts, 1) && port_allows(AllPorts, 2));
+static_assert(port_allows(only_port(1), 1) && !port_allows(only_port(1), 0) && !port_allows(only_port(1), 2));
+static_assert(port_mask(set_port_mask(MidiCC0, only_port(2))) == only_port(2));
+static_assert(strip_midi_channel(set_port_mask(MidiCC0, only_port(2))) == MidiCC0);
+static_assert(!selected_port(AllPorts).has_value());
+static_assert(selected_port(only_port(2)).value() == 2);
+// Channel and port survive each other's setters, in either order
+static_assert(midi_channel(set_midi_channel(set_port_mask(MidiCC0, only_port(1)), 7)) == 7);
+static_assert(port_mask(set_midi_channel(set_port_mask(MidiCC0, only_port(1)), 7)) == only_port(1));
+static_assert(port_mask(set_port_mask(set_midi_channel(MidiCC0, 7), only_port(1))) == only_port(1));
+static_assert(midi_channel(set_port_mask(set_midi_channel(MidiCC0, 7), only_port(1))) == 7);
+// Clearing the channel back to Omni must not disturb the port
+static_assert(port_mask(set_midi_channel(set_port_mask(MidiCC0, only_port(1)), 0)) == only_port(1));
 
 constexpr bool is_midi_poly_cable(uint32_t id) {
 	id = strip_midi_channel(id);

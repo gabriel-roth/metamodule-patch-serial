@@ -25,6 +25,10 @@ struct PatchData {
 	std::vector<uint16_t> bypassed_modules;
 	std::vector<ModuleAlias> module_aliases;
 	std::vector<ExpanderConnection> expanders;
+
+	std::vector<uint16_t> module_cores;
+	std::vector<uint32_t> module_loads; //units in ppm of one core
+
 	uint32_t midi_poly_num = 1;
 	// User-set max poly channels: 0 = Auto (compute from cables), 1-8 = hard-set midi_poly_num
 	uint16_t midi_poly_num_setting = 0;
@@ -42,6 +46,20 @@ struct PatchData {
 		module_slugs.push_back("HubMedium");
 		knob_sets.push_back({{}, "Knob Set 1"});
 		midi_maps.name = "MIDI";
+	}
+
+	// True if a previously calculated load balance is present and still matches the modules
+	bool has_load_balance(unsigned num_cores) const {
+		if (module_cores.size() != module_slugs.size())
+			return false;
+		if (module_loads.size() != module_slugs.size())
+			return false;
+		return std::ranges::all_of(module_cores, [=](uint16_t core) { return core < num_cores; });
+	}
+
+	void clear_load_balance() {
+		module_cores.clear();
+		module_loads.clear();
 	}
 
 	const MappedKnob *find_mapped_knob(uint32_t set_id, uint32_t module_id, uint32_t param_id) const {
@@ -278,7 +296,7 @@ struct PatchData {
 		return nullptr;
 	}
 
-	const MappedInputJack *find_mapped_injack(uint16_t panel_jack_id) const {
+	const MappedInputJack *find_mapped_injack(uint32_t panel_jack_id) const {
 		for (auto &m : mapped_ins) {
 			if (m.panel_jack_id == panel_jack_id)
 				return &m;
@@ -294,7 +312,7 @@ struct PatchData {
 		return nullptr;
 	}
 
-	const MappedOutputJack *find_mapped_outjack(uint16_t panel_jack_id) const {
+	const MappedOutputJack *find_mapped_outjack(uint32_t panel_jack_id) const {
 		for (auto &m : mapped_outs) {
 			if (m.panel_jack_id == panel_jack_id)
 				return &m;
@@ -302,7 +320,7 @@ struct PatchData {
 		return nullptr;
 	}
 
-	void add_mapped_injack(uint16_t panel_jack_id, Jack jack) {
+	void add_mapped_injack(uint32_t panel_jack_id, Jack jack) {
 		for (auto &m : mapped_ins) {
 			if (m.panel_jack_id == panel_jack_id) {
 				for (auto &j : m.ins) {
@@ -318,11 +336,11 @@ struct PatchData {
 		update_midi_poly_num(panel_jack_id);
 	}
 
-	void add_mapped_outjack(uint16_t panel_jack_id, Jack jack) {
+	void add_mapped_outjack(uint32_t panel_jack_id, Jack jack) {
 		mapped_outs.push_back({panel_jack_id, jack});
 	}
 
-	void set_panel_in_alias(uint16_t panel_jack_id, std::string_view alias) {
+	void set_panel_in_alias(uint32_t panel_jack_id, std::string_view alias) {
 		for (auto &m : mapped_ins) {
 			if (m.panel_jack_id == panel_jack_id) {
 				m.alias_name.copy(alias);
@@ -330,7 +348,7 @@ struct PatchData {
 		}
 	}
 
-	void set_panel_out_alias(uint16_t panel_jack_id, std::string_view alias) {
+	void set_panel_out_alias(uint32_t panel_jack_id, std::string_view alias) {
 		for (auto &m : mapped_outs) {
 			if (m.panel_jack_id == panel_jack_id) {
 				m.alias_name.copy(alias);
@@ -394,6 +412,8 @@ struct PatchData {
 	size_t add_module(std::string_view slug) {
 		auto module_id = module_slugs.size();
 		module_slugs.push_back({slug});
+		// The new module has no measured load, so the balance must be re-calculated
+		clear_load_balance();
 		return module_id;
 	}
 
@@ -561,6 +581,9 @@ struct PatchData {
 		std::erase_if(expanders, [=](ExpanderConnection const &exp) {
 			return exp.left_module_id == module_id || exp.right_module_id == module_id;
 		});
+
+		// The module's measured load no longer applies
+		clear_load_balance();
 	}
 
 	//
@@ -668,7 +691,7 @@ private:
 		return nullptr;
 	}
 
-	void update_midi_poly_num(uint16_t panel_jack_id) {
+	void update_midi_poly_num(uint32_t panel_jack_id) {
 		// User hard-set the count: ignore cables
 		if (midi_poly_num_setting > 0) {
 			midi_poly_num = midi_poly_num_setting;

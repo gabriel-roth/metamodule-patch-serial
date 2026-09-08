@@ -35,6 +35,11 @@ static ryml::Tree create_tree(PatchData const &pd, ryml::Tree &tree) {
 	if (pd.expanders.size())
 		data["expanders"] << pd.expanders;
 
+	if (pd.module_cores.size() > 0) {
+		data["module_cores"] << pd.module_cores;
+		data["module_loads"] << pd.module_loads;
+	}
+
 	return tree;
 }
 

@@ -315,3 +315,125 @@ TEST_CASE("set_module_alias clear with empty string") {
 	CHECK(pd.get_module_alias(1).empty());
 	CHECK(pd.module_aliases.empty());
 }
+
+TEST_CASE("MIDI map port mask round-trip") {
+	MetaModule::PatchData pd{
+		.module_slugs{"HubMedium", "VCF"},
+	};
+	pd.patch_name = "midi_port_mask";
+
+	// "TRS only" on a CC map, and no filter on a note-gate map
+	pd.add_update_midi_map(MappedKnob{.panel_knob_id = MidiCC0 + 5,
+									  .module_id = 1,
+									  .param_id = 0,
+									  .midi_chan = 3,
+									  .midi_port_mask = MetaModule::Midi::only_port(1),
+									  .min = 0.f,
+									  .max = 1.f});
+	pd.add_update_midi_map(MappedKnob{
+		.panel_knob_id = MidiGateNote0 + 60, .module_id = 1, .param_id = 1, .min = 0.f, .max = 1.f});
+
+	auto yaml = patch_to_yaml_string(pd);
+
+	MetaModule::PatchData pd2;
+	bool ok = yaml_string_to_patch(yaml, pd2);
+	CHECK(ok);
+	REQUIRE(pd2.midi_maps.set.size() == 2);
+	CHECK(unsigned(pd2.midi_maps.set[0].midi_port_mask) == MetaModule::Midi::only_port(1));
+	CHECK(unsigned(pd2.midi_maps.set[0].midi_chan) == 3);
+
+	// An unfiltered map writes no key at all, and reads back as all-ports
+	CHECK(yaml.find("midi_port_mask") != std::string::npos);
+	CHECK(unsigned(pd2.midi_maps.set[1].midi_port_mask) == MetaModule::Midi::AllPorts);
+}
+
+TEST_CASE("MIDI map with no port mask field reads as all ports") {
+	std::string yaml = R"(PatchData:
+  patch_name: old_patch
+  module_slugs:
+    0: HubMedium
+    1: VCF
+  int_cables: []
+  mapped_ins: []
+  mapped_outs: []
+  static_knobs: []
+  mapped_knobs: []
+  midi_maps:
+    name: MIDI
+    set:
+      - panel_knob_id: 517
+        module_id: 1
+        param_id: 0
+        curve_type: 0
+        min: 0.0
+        max: 1.0
+)";
+
+	MetaModule::PatchData pd;
+	bool ok = yaml_string_to_patch(yaml, pd);
+	CHECK(ok);
+	REQUIRE(pd.midi_maps.set.size() == 1);
+	CHECK(unsigned(pd.midi_maps.set[0].midi_port_mask) == MetaModule::Midi::AllPorts);
+}
+
+TEST_CASE("load balance round-trip") {
+	MetaModule::PatchData pd{
+		.module_slugs{"HubMedium", "VCF", "VCO", "LFO"},
+	};
+	pd.patch_name = "balance_test";
+	pd.module_cores = {0, 0, 1, 1};
+	pd.module_loads = {0, 123456, 7890, 250000};
+
+	auto yaml = patch_to_yaml_string(pd);
+
+	MetaModule::PatchData pd2;
+	bool ok = yaml_string_to_patch(yaml, pd2);
+	CHECK(ok);
+	CHECK(pd2.module_cores == pd.module_cores);
+	CHECK(pd2.module_loads == pd.module_loads);
+	CHECK(pd2.has_load_balance(2));
+}
+
+TEST_CASE("load balance is not emitted when there is none") {
+	MetaModule::PatchData pd{
+		.module_slugs{"HubMedium", "VCF"},
+	};
+	pd.patch_name = "no_balance";
+
+	auto yaml = patch_to_yaml_string(pd);
+	CHECK(yaml.find("module_cores") == std::string::npos);
+	CHECK(yaml.find("module_loads") == std::string::npos);
+
+	MetaModule::PatchData pd2;
+	CHECK(yaml_string_to_patch(yaml, pd2));
+	CHECK(pd2.module_cores.empty());
+	CHECK(pd2.has_load_balance(2) == false);
+}
+
+TEST_CASE("load balance is invalidated by editing the modules") {
+	MetaModule::PatchData pd{
+		.module_slugs{"HubMedium", "VCF", "VCO"},
+	};
+	pd.module_cores = {0, 0, 1};
+	pd.module_loads = {0, 100, 200};
+	CHECK(pd.has_load_balance(2));
+
+	pd.add_module("LFO");
+	CHECK(pd.has_load_balance(2) == false);
+
+	pd.module_cores = {0, 0, 1, 1};
+	pd.module_loads = {0, 100, 200, 300};
+	CHECK(pd.has_load_balance(2));
+
+	pd.remove_module(2);
+	CHECK(pd.has_load_balance(2) == false);
+}
+
+TEST_CASE("load balance with an out-of-range core is not used") {
+	MetaModule::PatchData pd{
+		.module_slugs{"HubMedium", "VCF", "VCO"},
+	};
+	pd.module_cores = {0, 0, 3};
+	pd.module_loads = {0, 100, 200};
+	CHECK(pd.has_load_balance(2) == false);
+}
